@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
   const search = searchParams.get("q");
   const cursor = searchParams.get("cursor");
   const limit = 12;
+  const session = await auth();
 
   const modules = await db.miniApp.findMany({
     where: {
@@ -25,8 +26,6 @@ export async function GET(req: NextRequest) {
           }
         : {}),
     },
-    // NOTE: Always include category and author to avoid N+1 on listing pages.
-    // DO NOT remove the include without running EXPLAIN ANALYZE on the query.
     include: {
       category: true,
       author: { select: { id: true, name: true, image: true } },
@@ -40,7 +39,24 @@ export async function GET(req: NextRequest) {
   const items = hasMore ? modules.slice(0, limit) : modules;
   const nextCursor = hasMore ? items[items.length - 1].id : null;
 
-  return NextResponse.json({ items, nextCursor });
+  let votedIds = new Set<string>();
+  if (session?.user) {
+    const votes = await db.vote.findMany({
+      where: {
+        userId: session.user.id,
+        moduleId: { in: items.map((m: any) => m.id) },
+      },
+      select: { moduleId: true },
+    });
+    votedIds = new Set(votes.map((v: any) => v.moduleId));
+  }
+
+  const itemsWithVote = items.map((item: any) => ({
+    ...item,
+    hasVoted: votedIds.has(item.id),
+  }));
+
+  return NextResponse.json({ items: itemsWithVote, nextCursor });
 }
 
 // POST /api/modules — submit a new module (authenticated)
@@ -64,7 +80,7 @@ export async function POST(req: NextRequest) {
   const baseSlug = generateSlug(name);
   const existingSlugs = await db.miniApp
     .findMany({ where: { slug: { startsWith: baseSlug } }, select: { slug: true } })
-    .then((r) => r.map((m) => m.slug));
+    .then((r: any[]) => r.map((m: any) => m.slug));
   const slug = makeUniqueSlug(baseSlug, existingSlugs);
 
   const module = await db.miniApp.create({
