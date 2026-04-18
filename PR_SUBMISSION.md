@@ -1,57 +1,110 @@
-# Báo Cáo Hoàn Thành Thử Thách - Vị Trí Thực Tập Sinh CNTT
-**Ứng viên:** [Tên của bạn]  
-**Dự án:** Intern Community Hub  
+# Báo Cáo Hoàn Thành Bài test - Vị Trí Thực Tập Sinh CNTT (Dev Intern)
+**Ứng viên:** Nguyễn Quỳnh Trang  
+**Dự án:** Intern Community Hub (Nền tảng chia sẻ tiểu ứng dụng của cọng đồng Intern)
 
 Kính gửi bộ phận Tuyển dụng và anh/chị Technical Reviewer,
 
-Em xin gửi báo cáo chi tiết về quá trình giải quyết các issue cấp độ Medium và những nâng cấp chủ động về mặt UI/UX mà em đã thực hiện trong dự án `intern-community`. Dưới đây là phần tường thuật chi tiết nguyên nhân gốc rễ, phương pháp giải quyết và minh chứng cho tư duy kỹ thuật của em.
+Dưới đây là báo cáo chi tiết về quá trình em thực hiện bài Assessment. Nội dung được trình bày theo trình tự thời gian giải quyết sự cố, bắt đầu từ việc setup môi trường, fix các bug hạ tầng, hoàn thành các Issue cấp độ Medium và cuối cùng là chủ động nâng cấp UI/UX. Hệ thống báo cáo tuân thủ nguyên tắc: **Xác định nguyên nhân gốc (Root Cause) -> Đề xuất giải pháp -> Vị trí code điều chỉnh**.
 
 ---
 
-## 🚀 1. Giải Quyết Các Issue Cốt Lõi (Medium Level)
+## 🏛️ Sơ Đồ Hệ Thống & Tầm Nhìn Kiến Trúc
+Trước khi đi vào chi tiết fix lỗi, em xin tóm tắt kiến trúc của hệ thống hiện tại và khả năng mở rộng.
 
-### 1.1. Thêm Rate Limit cho API Vote (`POST /api/votes`)
-* **Nguyên nhân cốt lõi (Root Cause):** Hệ thống API Vote ban đầu hoàn toàn không có rào chắn, cho phép user spam click liên tục (DDoS nhẹ) làm nghẽn Database. Thuật toán cũ dùng `Map` được lưu sơ sài trong bộ nhớ, dễ dàng bị reset mất khi Hot-Reload hoặc chạy nhiều process song song.
-* **Hướng giải quyết:** 
-  - Tại file `src/app/api/votes/route.ts`, em đã viết lại hoàn toàn cơ chế Rate Limiting.
-  - Sử dụng `globalThis.rateLimitMap` để đảm bảo state tracking không bị mất khi Next.js build lại trong môi trường dev.
-  - Thiết lập ranh giới an toàn: **Tối đa 10 votes / 60 giây / 1 User**. Nếu vượt quá, request sẽ bị chặn lập tức từ Server, trả về mã lỗi `HTTP 429 Too Many Requests` kèm cảnh báo *"You're voting too fast"*.
-  - *Tại sao không dùng Redis?* Với quy mô nhỏ của dự án test, việc duy trì một logic rate limit in-memory nhưng được tổ chức chặt chẽ trong `globalThis` giúp giảm bớt gánh nặng setup dependency bên ngoài, hoàn toàn đáp ứng được logic bài toán đưa ra.
+```mermaid
+sequenceDiagram
+    participant User as Client (Next.js FE)
+    participant Auth as NextAuth.js
+    participant Server as Next.js API Routes (BE)
+    participant DB as PostgreSQL (Prisma ORM)
 
-### 1.2. Nâng Cấp Hoàn Toàn Thuật Toán Phân Trang (Pagination)
-* **Nguyên nhân cốt lõi:** Luồng code gốc sử dụng thiết kế `take: 12` bị fix cứng tại `page.tsx`, không cho phép người dùng lướt xem các danh sách module cũ hơn. 
-* **Hướng giải quyết:** Thay vì chỉ làm nút "Load More" bằng Cursor-based (cơ bản), em đã chủ động nâng cấp lên **Offset-based Pagination (Phân Trang Theo Số)** chuyên nghiệp hơn:
-  - **Dưới Backend (`src/app/api/modules/route.ts`):** Chuyển hướng tham số từ `cursor` sang `page` & `limit = 3`. Dùng lệnh `db.miniApp.count()` để tính toán tự động biến `totalPages` trả về cho Client.
-  - **Trên Frontend (`src/app/page.tsx` & `src/components/paginated-modules.tsx`):** Em tự xây dựng một Component phân trang hoàn toàn mới. Tích hợp thanh điều hướng chuẩn UX (`« First`, `‹ Prev`, Trang số, `Next ›`, `Last »`). 
-  - **Thuật toán Rendering:** Tích hợp hiệu ứng **Slide Animation (Trượt ngang)** mượt mà khi đổi trang. Code tự nhận diện được hướng trượt (bấm trang kế tiếp -> trượt trái; bấm quay lại -> trượt phải) bằng CSS thuần (`translate-x`) của Tailwind mà **không cần cài thêm thư viện nặng nề như Framer Motion**.
+    User->>Auth: Click "Sign in w/ GitHub"
+    Auth-->>User: Callback & Session Token
+    User->>Server: Gửi API Request (Ví dụ: /api/votes)
+    Server->>Server: Kiểm tra Authorization & Rate Limit
+    Server->>DB: Truy vấn dữ liệu (Prisma)
+    DB-->>Server: Trả về Data
+    Server-->>User: JSON Response
+    User->>User: Client cập nhật UI (React State)
+```
 
-### 1.3. Tính Năng Xóa Submission & Custom Modal Xác Nhận
-* **Nguyên nhân cốt lõi:** Người dùng không thể thu hồi lại các submission trạng thái `PENDING`. Hơn nữa, những cửa sổ xác nhận gọi lệnh `window.confirm()` trông rất nghiệp dư, có thể bị trình duyệt vô hiệu hóa (block pop-up) và phá vỡ cấu trúc thẩm mỹ của ứng dụng.
-* **Hướng giải quyết:**
-  - Ở Backend: Gọi đúng route `DELETE /api/modules/[id]` kèm theo cơ chế authorization.
-  - Ở Frontend (`src/components/delete-submission-button.tsx`): Em đã khai tử `window.confirm`, tự thiết kế một hệ thống **Custom Dialog Modal** sử dụng React State (`showModal`). 
-  - Modal được thiết kế đặt chính giữa trung tâm với màng lọc đen mờ (backdrop-blur-sm), icon chuông cảnh báo dễ nhận diện, nút **Cancel (màu đỏ)** và nút **Confirm (màu xanh Emerald)** đảm bảo phân biệt rõ tính chất rủi ro của thao tác xóa. Sau khi xóa thành công, gọi `router.refresh()` để cập nhật danh sách tức thì mà không cần F5.
-
----
-
-## 🎨 2. Cải Tiến Chủ Động (Proactive UI/UX Engineering)
-
-Mặc dù trọng tâm của dự án là logic tính năng, nhưng nhận thấy giao diện còn khá an toàn và có phần "cứng", em đã tự rework lại toàn bộ hệ thống Front-End để mang lại "Vibe" của một ứng dụng Premium:
-
-- **Glassmorphism Design:** Thiết kế lại Component `Navbar` và `ModuleCard` bằng hiệu ứng gương kính (`backdrop-filter: blur`), đổ shadow sâu và tạo hiệu ứng nhấc thẻ lơ lửng (`transform: translateY(-2px)`) khi chuột lướt vào.
-- **Trải Nghiệm Thao Tác (Micro-interactions):** Nút tìm kiếm (Search) được thêm filter sáng bóng (Shimmer Effect). Component `VoteButton` được thay đổi từ một hình tam giác đơn giản (Triangle) sang biểu tượng **Bàn tay giơ ngón cái (Thumbs-Up)** trực quan hơn, kèm theo hiệu ứng scale to ra khi đã vote thành công.
-- **Hiệu Năng (CSS over JS):** Toàn bộ Animation được xử lý hoàn toàn qua Tailwind CSS, đảm bảo chuẩn 60fps mà không làm tăng kích thước bundle của NextJS JavaScript.
+**Mục đích hệ thống:** `Intern Community Hub` đóng vai trò là một sân chơi tập trung cho các thực tập sinh đóng góp, khám phá và vote cho các tiểu ứng dụng (Mini-app) mã nguồn mở.  
+**Khả năng mở rộng (Future Scaling):** 
+- *Caching:* Khi lượng truy cập lớn, có thể thêm Redis ở giữa Server và Database để cache danh sách API `/api/modules` tránh query DB liên tục.
+- *Microservices:* Tách module Submit và Notification thành các service độc lập chạy background jobs.
 
 ---
 
-## 🤖 3. Cách Em Ứng Dụng AI Để Thúc Đẩy Hiệu Suất Code
+## 🛠️ PHẦN 1: XỬ LÝ LỖI KHỞI TẠO MÔI TRƯỜNG & AUTHENTICATION
 
-Với vị trí TTS, em quan niệm khả năng độc lập nghiên cứu và tận dụng công nghệ hiện đại là ưu tiên hàng đầu. Xuyên suốt dự án, thay vì "copy-paste mã nguồn mù quáng", em đã thiết lập quy trình **Pair-programming cùng AI**:
+Trong quá trình khởi chạy dự án theo README, em liên tục gặp các rào cản về tương thích Node.js và NextAuth. Dưới sự hỗ trợ của AI để chẩn đoán log lỗi, em đã từng bước gỡ rối:
 
-1. **Phân tích vấn đề (Root-cause Analysis):** Em dùng AI để quét qua các dòng lỗi của Next.js (ví dụ như những lỗi về Type TypeScript hoặc lỗi cấu hình `ELIFECYCLE` của Prisma) để nhanh chóng phát hiện điểm nghẽn mà không sa lầy thời gian.
-2. **Nghiên cứu mô hình / Phác thảo kiến trúc:** Trước khi code cái Component Pagination trượt ngang, em trao đổi với AI để so sánh việc dùng Framer Motion hay Tailwind Transition. AI gợi ý Tailwind, em dùng nó làm bản phác thảo rồi tự tay tùy chỉnh timeout/keyframe logic cho phù hợp với luồng render Component của mình.
-3. **Automated Refactoring:** Khi đã viết xong luồng tính năng chính, em ra lệnh cho AI dọn dẹp các mã lặp lại (ví dụ như đồng bộ lại toàn bộ biến `whereCondition` trong file `page.tsx` và `route.ts`). Điều này giúp em tối ưu hóa thời gian refactor, giữ codebase sạch sẽ theo tiêu chuẩn SOLID.
+### 1. Sự cố Docker & Prisma Target (Lỗi lệnh `pnpm db:seed`)
+* **Nguyên nhân:** Máy tính đang sử dụng Node.js v16.20.2 và v18.12, trong khi engine Prisma của dự án yêu cầu bộ thư viện runtime của Node.js v20+. Hệ quả là lệnh `pnpm db:seed` báo lỗi đỏ trên Terminal do không parse được Prisma Client.
+* **Cách khắc phục:** 
+  - Khai thác AI GPT để nhận diện nhanh xung đột phiên bản.
+  - Xóa folder `node_modules`, nâng cấp lên **Node.js v20.20.2**.
+  - Thiếu lập PostgreSQL qua Docker, cập nhật `.env` và chạy lại `pnpm prisma generate`. Kết quả cắm 10 modules mẫu thành công.
 
-> **Kết luận:** Bằng việc làm chủ AI như một trợ thủ hỗ trợ, em khẳng định bản thân có thể tự giải quyết các technical bugs phức tạp nhanh gấp 3 lần bình thường, luôn làm chủ Data Flow, cấu trúc hệ thống và không bị phụ thuộc công nghệ.
+### 2. Sự Cố 404 Not Found Khi Đăng Nhập GitHub OAuth
+* **Nguyên nhân:** Khung NextAuth v5 không tự động cung cấp UI mặc định cho `/api/auth/signin` nhưng code cũ lại trỏ Redirect về đó khi user chưa đăng nhập. Hơn nữa, `AUTH_GITHUB_ID` trong `.env` bị trống.
+* **Vị trí sửa:** `src/app/page.tsx` và `src/app/auth/signin/page.tsx`.
+* **Cách khắc phục:** 
+  - Đăng ký app trên GitHub Developer settings, thêm client/secret vào `.env`.
+  - Tự thiết kế một trang `/auth/signin` riêng bằng Client Component.
+  - Đổi lại toàn bộ route redirect từ `/api/...` về `/auth/signin` giúp hệ thống điều hướng trơn tru.
 
-Em hy vọng thông qua bản Pull Request này, anh/chị có thể hình dung rõ ràng năng lực code cũng như tư duy sản phẩm của em! Cảm ơn anh/chị đã tạo ra một thử thách rất thú vị!
+### 3. Cánh Cáo Hydration Mismatch Do Cơ Chế SSR Của Next.js
+* **Nguyên nhân:** Môi trường Server không có biến `window`, nhưng code cũ gọi `{window.location.origin}`. Đồng thời Component input và Navbar thay đổi State tức thì ở lần render đầu, gây xung đột mã HTML giữa Server và Client.
+* **Cách khắc phục:** Đẩy các component liên quan sang file `"use client"` riêng biệt, dùng trick `[isMounted, setIsMounted] = useState(false)` gác lại việc render cho đến khi component mount xong ở Front-end.
+
+---
+
+## 🚀 PHẦN 2: THỰC THI MEDIUM ISSUES (TÍNH NĂNG CỐT LÕI)
+
+### Tính năng 1: Lỗi Category Filter bị Load lại toàn trang (Full Page Reload)
+* **Nguyên nhân:** Các pill Category được code thủ công bằng thẻ `<a href="/?category=gaming">`. Điều này vô tình triệt tiêu sức mạnh SPA (Single Page Application) của React, làm tải lại toàn bộ trang, đồng thời "xóa sổ" các tham số tìm kiếm đang có (như `?q=chat`).
+* **Vị trí sửa:** Chuyển dời toàn bộ logic sang `src/components/category-filter.tsx`.
+* **Cách khắc phục:**
+  - Khởi tạo `URLSearchParams` từ `searchParams` hiện tại để bảo toàn key `q`.
+  - Sử dụng `router.push('/?'+params)` từ thư viện `next/navigation` giúp cập nhật URL trên thanh địa chỉ mà hệ thống chỉ load đúng data mới, không giật màn hình (SPA merge).
+
+### Tính năng 2: Chống Spam API bằng Rate Limits (`POST /api/votes`)
+* **Nguyên nhân:** View Network tab cho thấy khi click vote liên tục, server đều nhẹ dạ trả về mảng `200 OK`. Nếu có bot spam, database bị DDoS.
+* **Vị trí sửa:** `src/app/api/votes/route.ts`
+* **Cách khắc phục:** 
+  - Khởi tạo bộ đếm trong `globalThis` (để không bị mất state khi NextJS dev server hot-reload).
+  - Áp dụng nguyên tắc: Giới hạn 10 lượt click / 60s cho mỗi IP/User. Các request tàn dư thứ 11 sẽ bị từ chối với status code `429 Too Many Requests` với thông báo `"You're voting too fast. Please wait 60 seconds."`
+
+### Tính năng 3: Chuyển đổi Load More sang Offset-Pagination (Phân Trang)
+* **Nguyên nhân:** Code gốc chỉ load cứng `take: 12` module, không có cách nào xem các mục cũ hơn.
+* **Vị trí sửa:** `route.ts` (API API/Modules) & Thêm mới `paginated-modules.tsx`.
+* **Cách khắc phục:**
+  - Bổ sung data rác (seed data) với hàng tá module mới để quan sát cụ thể việc sang trang (3 items/page).
+  - Xây mới Frontend component chứa cụm nút sang trang (`< 1 2 3 ... >`). Truyền tham số `page` và `limit` ngược lên API để nhận số liệu chuẩn xác tính ra `totalPages`.
+
+### Tính năng 4: Nút Xóa (Delete) & Custom Popup Confirmation
+* **Nguyên nhân:** Module sau khi "Submit" nằm chết ở trạng thái PENDING. Nhưng nếu lập trình viên muốn hủy submit, không có nút Delete nào cả. Khi có nút Delete, nếu dùng lệnh `window.confirm()` hiển thị thông báo thì quá nghiệp dư và phô kệch.
+* **Vị trí sửa:** `src/components/delete-submission-button.tsx`.
+* **Cách khắc phục:**
+  - Em đã tự viết một thẻ Modal Pop-up riêng ở giữa màn hình bằng div che phủ (backdrop).
+  - Modal được bao bọc bằng React ID state, gồm icon cái chuông báo, 1 nút OK (màu xanh Emerald) và 1 nút Cancel (màu Đỏ), mang lại cảm giác cực kỳ êm ái cho user. Xóa thành công, tự động gọi `router.refresh()` làm xịn danh sách.
+
+---
+
+## 🎨 PHẦN 3: NÂNG TẦM GIAO DIỆN (UI/UX REDESIGN)
+Dù yêu cầu không bắt buộc, nhưng với tư duy product engineering, em đã đập đi xây lại hệ thống UI cho đẹp mắt.
+* **Trắng bệch $\rightarrow$ Glassmorphism:** Đưa hiệu ứng thẻ kính mờ ảo (backdrop-blur) vào Navbar, Module Cards và Empty States.
+* **Tương tác:** Nút Vote tam giác cũ kỹ được thay bằng Icon Hình bàn tay 👍, hiệu ứng bừng sáng, to lên 115% khi click xong. Header Homepage rực rỡ với banner gradient màu tím/indigo.
+
+---
+
+## 🤖 HIỆU SUẤT X2 KHI LÀM CHỦ CÔNG CỤ AI
+Cách em đã tương tác với trí tuệ nhân tạo (AI GPT) không dừng lại ở việc copy code, mà để **Master Data Flow (Làm chủ luồng dữ liệu)**:
+1. Em giao cho AI đọc các file log lỗi `stack-trace` khô khan của Next.js để tìm xem biến môi trường nào bị khuyết mà mình nhìn sót. 
+2. Em chủ động định hướng cho AI: *"Tạo cho tao 1 pop up thông báo xác nhận xóa có chức năng chuông thay vì `window.confirm`"*. AI hỗ trợ generate ra template CSS thuần có hoạt ảnh (animation), còn em là người đặt lại vị trí State React cho khớp với luồng Submit của App.
+
+Em tin rằng việc tư duy nhanh nhạy + kỹ năng điều khiển AI thông minh là tố chất sống còn của một kỹ sư IT hiện đại. Mong anh/chị xem xét qua Pull Request này của em!
+
+Trân trọng,
+Nguyễn Quỳnh Trang
