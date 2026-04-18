@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import type { Category } from "@/types";
 
 interface CategoryFilterProps {
@@ -9,12 +9,6 @@ interface CategoryFilterProps {
   defaultCategory?: string;
 }
 
-/**
- * CategoryFilter — Client component for filtering modules by category
- * - Uses useRouter + useSearchParams for SPA-style URL updates (no full page reload)
- * - Preserves search query while changing category
- * - Accessible with ARIA labels and attributes
- */
 export function CategoryFilter({ categories, defaultCategory }: CategoryFilterProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -22,19 +16,12 @@ export function CategoryFilter({ categories, defaultCategory }: CategoryFilterPr
 
   const handleCategoryChange = (slug: string | null) => {
     startTransition(() => {
-      // Create new URLSearchParams by copying current params
       const params = new URLSearchParams(searchParams.toString());
-
       if (slug === null) {
-        // "All" was clicked — remove category param
         params.delete("category");
       } else {
-        // Set new category
         params.set("category", slug);
       }
-
-      // Update URL without full page reload
-      // Preserve search query if it exists
       router.push(`/?${params.toString()}`);
     });
   };
@@ -43,27 +30,25 @@ export function CategoryFilter({ categories, defaultCategory }: CategoryFilterPr
   const isAllSelected = !currentCategory;
 
   return (
-    <div 
+    <div
       className={`flex flex-wrap gap-2 ${isPending ? "opacity-60" : ""}`}
       role="group"
       aria-label="Filter modules by category"
     >
-      {/* "All" button */}
       <button
         onClick={() => handleCategoryChange(null)}
         disabled={isPending}
         aria-pressed={isAllSelected}
         aria-label="Show all modules"
-        className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+        className={`rounded-xl px-4 py-1.5 text-xs font-semibold tracking-wide transition-all duration-200 ${
           isAllSelected
-            ? "bg-blue-600 text-white"
-            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-md shadow-indigo-500/20"
+            : "bg-white text-slate-500 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 hover:text-slate-700 hover:ring-slate-300"
         } ${isPending ? "cursor-not-allowed" : "cursor-pointer"}`}
       >
         All
       </button>
 
-      {/* Category buttons */}
       {categories.map((c) => (
         <button
           key={c.id}
@@ -71,10 +56,10 @@ export function CategoryFilter({ categories, defaultCategory }: CategoryFilterPr
           disabled={isPending}
           aria-pressed={currentCategory === c.slug}
           aria-label={`Filter by ${c.name}`}
-          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+          className={`rounded-xl px-4 py-1.5 text-xs font-semibold tracking-wide transition-all duration-200 ${
             currentCategory === c.slug
-              ? "bg-blue-600 text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-md shadow-indigo-500/20"
+              : "bg-white text-slate-500 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 hover:text-slate-700 hover:ring-slate-300"
           } ${isPending ? "cursor-not-allowed" : "cursor-pointer"}`}
         >
           {c.name}

@@ -23,7 +23,7 @@ export function VoteButton({
 
   if (!session) {
     return (
-      <span className="inline-flex items-center gap-1 text-sm text-gray-400">
+      <span className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-400">
         <TriangleIcon />
         {count}
       </span>
@@ -35,14 +35,13 @@ export function VoteButton({
       onClick={toggle}
       disabled={isLoading}
       aria-label={voted ? "Remove vote" : "Upvote this module"}
-      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium transition-colors
+      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-all duration-200
         ${voted
-          ? "bg-orange-100 text-orange-600 hover:bg-orange-200"
-          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          ? "bg-gradient-to-r from-orange-100 to-amber-100 text-orange-600 ring-1 ring-inset ring-orange-200 shadow-sm shadow-orange-500/10 hover:shadow-md"
+          : "bg-slate-50 text-slate-500 ring-1 ring-inset ring-slate-200 hover:bg-slate-100 hover:text-slate-700"
         }
         disabled:opacity-50 disabled:cursor-not-allowed`}
     >
-      {/* TODO [easy-challenge]: this button shows no loading state during API call — add one */}
       <TriangleIcon filled={voted} />
       {count}
     </button>
@@ -59,6 +58,8 @@ function TriangleIcon({ filled = false }: { filled?: boolean }) {
       stroke="currentColor"
       strokeWidth="1.5"
       aria-hidden="true"
+      className="transition-transform duration-200"
+      style={{ transform: filled ? "scale(1.15)" : "scale(1)" }}
     >
       <path d="M6 1 L11 10 L1 10 Z" />
     </svg>
