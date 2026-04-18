@@ -1,10 +1,20 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession, signIn, signOut } from "next-auth/react";
 
 export function Navbar() {
   const { data: session } = useSession();
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return null;
+  }
 
   return (
     <nav className="border-b border-gray-200 bg-white">

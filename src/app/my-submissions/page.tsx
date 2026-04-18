@@ -11,7 +11,7 @@ const statusStyles: Record<string, string> = {
 
 export default async function MySubmissionsPage() {
   const session = await auth();
-  if (!session?.user) redirect("/api/auth/signin");
+  if (!session?.user) redirect("/auth/signin");
 
   const submissions = await db.miniApp.findMany({
     where: { authorId: session.user.id },
