@@ -9,35 +9,37 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const category = searchParams.get("category");
   const search = searchParams.get("q");
-  const cursor = searchParams.get("cursor");
-  const limit = 12;
+  const page = parseInt(searchParams.get("page") || "1");
+  const limit = parseInt(searchParams.get("limit") || "3");
   const session = await auth();
 
-  const modules = await db.miniApp.findMany({
-    where: {
-      status: "APPROVED",
-      ...(category ? { category: { slug: category } } : {}),
-      ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { description: { contains: search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    },
+  const whereCondition: any = {
+    status: "APPROVED",
+    ...(category ? { category: { slug: category } } : {}),
+    ...(search
+      ? {
+          OR: [
+            { name: { contains: search, mode: "insensitive" } },
+            { description: { contains: search, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
+
+  const totalCount = await db.miniApp.count({ where: whereCondition });
+
+  const items = await db.miniApp.findMany({
+    where: whereCondition,
     include: {
       category: true,
       author: { select: { id: true, name: true, image: true } },
     },
     orderBy: { voteCount: "desc" },
-    take: limit + 1,
-    ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+    take: limit,
+    skip: (page - 1) * limit,
   });
 
-  const hasMore = modules.length > limit;
-  const items = hasMore ? modules.slice(0, limit) : modules;
-  const nextCursor = hasMore ? items[items.length - 1].id : null;
+  const totalPages = Math.ceil(totalCount / limit);
 
   let votedIds = new Set<string>();
   if (session?.user) {
@@ -56,7 +58,7 @@ export async function GET(req: NextRequest) {
     hasVoted: votedIds.has(item.id),
   }));
 
-  return NextResponse.json({ items: itemsWithVote, nextCursor });
+  return NextResponse.json({ items: itemsWithVote, totalPages, currentPage: page });
 }
 
 // POST /api/modules — submit a new module (authenticated)

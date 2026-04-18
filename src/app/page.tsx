@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { ModuleCard } from "@/components/module-card";
 import { SearchForm } from "@/components/search-form";
 import { CategoryFilter } from "@/components/category-filter";
-import { LoadMoreModules } from "@/components/load-more-modules";
+import { PaginatedModules } from "@/components/paginated-modules";
 export default async function HomePage({
   searchParams,
 }: {
@@ -12,31 +12,33 @@ export default async function HomePage({
   const { q, category } = await searchParams;
   const session = await auth();
 
-  const modules = await db.miniApp.findMany({
-    where: {
-      status: "APPROVED",
-      ...(category ? { category: { slug: category } } : {}),
-      ...(q
-        ? {
-            OR: [
-              { name: { contains: q, mode: "insensitive" } },
-              { description: { contains: q, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    },
+  const whereCondition: any = {
+    status: "APPROVED",
+    ...(category ? { category: { slug: category } } : {}),
+    ...(q
+      ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" } },
+            { description: { contains: q, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
+
+  const totalCount = await db.miniApp.count({ where: whereCondition });
+
+  const initialModules = await db.miniApp.findMany({
+    where: whereCondition,
     // DO NOT remove include — avoids N+1 on category/author fields.
     include: {
       category: true,
       author: { select: { id: true, name: true, image: true } },
     },
     orderBy: { voteCount: "desc" },
-    take: 13,
+    take: 3,
   });
 
-  const hasMore = modules.length > 12;
-  const initialModules = hasMore ? modules.slice(0, 12) : modules;
-  const initialNextCursor = hasMore ? initialModules[initialModules.length - 1].id : null;
+  const initialTotalPages = Math.ceil(totalCount / 3);
 
   // Fetch which modules the current user has voted on
   let votedIds = new Set<string>();
@@ -79,20 +81,12 @@ export default async function HomePage({
           )}
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {initialModules.map((module: any) => (
-            <ModuleCard
-              key={module.id}
-              module={module}
-              hasVoted={votedIds.has(module.id)}
-            />
-          ))}
-          <LoadMoreModules
-            initialNextCursor={initialNextCursor}
-            q={q}
-            category={category}
-          />
-        </div>
+        <PaginatedModules
+          initialItems={initialModules}
+          initialTotalPages={initialTotalPages}
+          q={q}
+          category={category}
+        />
       )}
     </div>
   );
