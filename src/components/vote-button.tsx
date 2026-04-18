@@ -24,7 +24,7 @@ export function VoteButton({
   if (!session) {
     return (
       <span className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-400">
-        <TriangleIcon />
+        <ThumbsUpIcon />
         {count}
       </span>
     );
@@ -42,26 +42,29 @@ export function VoteButton({
         }
         disabled:opacity-50 disabled:cursor-not-allowed`}
     >
-      <TriangleIcon filled={voted} />
+      <ThumbsUpIcon filled={voted} />
       {count}
     </button>
   );
 }
 
-function TriangleIcon({ filled = false }: { filled?: boolean }) {
+function ThumbsUpIcon({ filled = false }: { filled?: boolean }) {
   return (
     <svg
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
       fill={filled ? "currentColor" : "none"}
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
       aria-hidden="true"
       className="transition-transform duration-200"
       style={{ transform: filled ? "scale(1.15)" : "scale(1)" }}
     >
-      <path d="M6 1 L11 10 L1 10 Z" />
+      <path d="M7 22V11l5-10a2 2 0 0 1 2 2v4h5.5a2 2 0 0 1 2 1.9l-.77 7.69A2 2 0 0 1 18.74 18H7z" />
+      <path d="M2 13v6a2 2 0 0 0 2 2h1V11H4a2 2 0 0 0-2 2z" />
     </svg>
   );
 }
